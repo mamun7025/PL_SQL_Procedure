@@ -1,0 +1,82 @@
+SET SERVEROUTPUT ON
+
+CREATE OR REPLACE PROCEDURE proc_upddate_sales_return_cost_return IS
+
+    v_id              NUMBER(19, 0);
+    v_lookup_value1   NUMBER(19, 5);
+    v_lookup_value2   NUMBER(19, 5);
+    CURSOR c1 IS
+    SELECT
+        m.id   AS lg_id,
+        m.item_code,
+        m.reference_order_number,
+        m.reference_entity_name,
+        m.reference_id,
+        r.id   AS sale_return_line_id,
+        m.sales_line_id,
+        r.sales_invoice_line_id,
+        m.cost_unit_price,
+        m.cost_amount
+    FROM
+        vat_mushak_6_2        m,
+        salesreturn_docline   r
+    WHERE
+        m.reference_id = r.id
+        AND m.reference_entity_name = 'SalesReturnDocLine'
+        AND m.transaction_type = 'SALE_RETURN'
+        AND m.cost_amount IS NULL
+    ORDER BY
+        m.id DESC;
+
+BEGIN
+    FOR x IN c1 LOOP
+        dbms_output.put_line('Mushak LG ID: '
+                             || x.lg_id
+                             || ' cost find saleLineId: '
+                             || x.sales_invoice_line_id);
+
+        SELECT
+            mc.id,
+            mc.cost_unit_price,
+            mc.cost_amount
+        INTO
+            v_id,
+            v_lookup_value1,
+            v_lookup_value2
+        FROM
+            vat_mushak_6_2 mc
+        WHERE
+            mc.sales_line_id = x.sales_invoice_line_id;
+
+        IF v_lookup_value1 IS NOT NULL THEN
+            dbms_output.put_line('cost unit: '
+                                 || v_lookup_value1
+                                 || ' cost amount: '
+                                 || v_lookup_value2
+                                 || ' applied lg id: '
+                                 || x.lg_id);
+        -- update table
+
+            UPDATE vat_mushak_6_2
+            SET
+                cost_unit_price = v_lookup_value1,
+                cost_amount = v_lookup_value2
+            WHERE
+                id = x.lg_id;
+
+        END IF;
+
+    END LOOP;
+
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        raise_application_error(-20001, 'An error was encountered - '
+                                        || sqlcode
+                                        || ' -ERROR'
+                                        || sqlerrm);
+END;
+/
+
+------------- Call
+--EXECUTE proc_upddate_sales_return_cost_return();
